@@ -1,0 +1,7 @@
+name = "Parareal"
+uuid = "471f022c-f055-4b95-943e-e08608a061c9"
+authors = ["Robert Hahn"]
+version = "0.1.0-DEV"
+
+[deps]
+DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
