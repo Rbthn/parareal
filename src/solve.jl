@@ -55,6 +55,35 @@ function solve(prob::ODEProblem, alg;
     ############################################################################
 
 
+    for iteration = 1:maxit
+        # thread-parallel loop
+        Threads.@threads for i = iteration:parareal_intervals
+            fine_int = fine_ints[i]
+            reinit!(fine_int, sync_values[i], t0=sync_points[i])
+            step!(fine_int)
+
+            sync_errors[i] = norm(sync_values[i+1], fine_int.sol.u[end])
+        end
+
+        # parareal exactness
+        sync_errors[1:iteration-1] .= 0
+
+        # check for convergence
+        if maximum(sync_errors) <= tol
+            break
+        end
+
+        # sequential coarse solve
+        for i = iteration:parareal_intervals
+            reinit!(coarse_int, sync_values[i], t0=sync_points[i])
+            step!(coarse_int)
+
+            # update equation
+            sync_values[i+1] = coarse_int.u + fine_ints[i].u - coarse_prev[i]
+        end
+    end
+
+
     ############################################################################
     ##########################   COMBINE SOLUTIONS   ###########################
     ############################################################################
