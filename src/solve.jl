@@ -92,6 +92,17 @@ function solve(prob::ODEProblem, alg;
     ##########################   COMBINE SOLUTIONS   ###########################
     ############################################################################
 
+    sols = [int.sol for int in fine_ints]
+    merged_sol = sols[1]
 
-    return nothing
+    # combine fine solutions
+    for sol_2 in sols[2:end]
+        merge_solution!(merged_sol, sol_2)
+        sum_stats!(merged_sol, sol_2)
+    end
+
+    # add statistics from coarse solver
+    sum_stats!(merged_sol, coarse_int.sol)
+
+    return merged_sol
 end
