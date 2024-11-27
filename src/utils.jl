@@ -1,10 +1,10 @@
-using DifferentialEquations
+import SciMLBase
 
 """
     Merge contents of sol_2 into sol_1.
     This is a hack and not supported by DifferentialEquations!
 """
-function merge_solution!(sol_1::ODESolution, sol_2::ODESolution)
+function merge_solution!(sol_1::SciMLBase.ODESolution, sol_2::SciMLBase.ODESolution)
     # sanity check: algorithm, dense, ... shold match
     if sol_1.alg != sol_2.alg
         throw(ArgumentError("Algorithm mismatch between partial solutions: expected $(sol_1.alg), got $(sol_2.alg)."))
@@ -21,16 +21,22 @@ function merge_solution!(sol_1::ODESolution, sol_2::ODESolution)
 end
 
 """
-    Add statistics entries of sol_2 to the ones of sol_1.
-    This is a hack and not supported by DifferentialEquations!
+    Add solver statistics from s2 to s1.
+    This is a hack not directly supported by DifferentialEquations!
 """
-function sum_stats!(sol_1::ODESolution, sol_2::ODESolution)
-    stat_fields = fieldnames(typeof(sol_1.stats))
-    for stat in stat_fields
-        stat1 = getfield(sol_1.stats, stat)
-        stat2 = getfield(sol_2.stats, stat)
-        setfield!(sol_1.stats, stat, stat1 + stat2)
+function _add_stats!(s1::SciMLBase.DEStats, s2::SciMLBase.DEStats)
+    for field in fieldnames(typeof(s2))
+        value1 = getfield(s1, field)
+        value2 = getfield(s2, field)
+        setfield!(s1, field, value1 + value2)
     end
+    return nothing
+end
 
+function _reset_stats!(stat::SciMLBase.DEStats)
+    for field in fieldnames(typeof(stat))
+        value = getfield(stat, field)
+        setfield!(stat, field, zero(value))
+    end
     return nothing
 end

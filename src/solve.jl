@@ -1,9 +1,10 @@
+import SciMLBase
 using DifferentialEquations
 
 """
     Solve ODEProblem using the Parareal algorithm.
 """
-function solve(prob::ODEProblem, alg;
+function solve(prob::SciMLBase.ODEProblem, alg;
     parareal_intervals::Int,
     tol=1e-3::Float64,
     norm=(x, y) -> maximum(abs.(x - y)),
@@ -34,6 +35,9 @@ function solve(prob::ODEProblem, alg;
     # measured by given norm
     sync_errors = fill(Inf, parareal_intervals - 1)
 
+    # statistics
+    stats_total = SciMLBase.DEStats()
+    nsolve_seq = 0
 
     # initial coarse solve. Make sure to step to the sync points.
     initial_int = init(prob, alg;
@@ -47,6 +51,10 @@ function solve(prob::ODEProblem, alg;
         sync_values[i+1] = copy(initial_int.sol.u[end])
         coarse_prev[i] = copy(initial_int.sol.u[end])
     end
+
+    # add statistics from initialization
+    _add_stats!(stats_total, initial_int.stats)
+    nsolve_seq += initial_int.stats.nsolve
 
     # coarse integrator
     coarse_int = init(prob, alg;
@@ -77,6 +85,16 @@ function solve(prob::ODEProblem, alg;
             end
         end
 
+        # add statistics
+        nsolve_fine_max = 0
+        for i = iteration:parareal_intervals
+            stat = fine_ints[i].stats
+            _add_stats!(stats_total, stat)
+
+            nsolve_fine_max = max(nsolve_fine_max, stat.nsolve)
+        end
+        nsolve_seq += nsolve_fine_max
+
         # parareal exactness
         sync_errors[1:iteration-1] .= 0
 
@@ -92,6 +110,10 @@ function solve(prob::ODEProblem, alg;
 
             # update equation
             sync_values[i+1] = coarse_int.u + fine_ints[i].u - coarse_prev[i]
+
+            # add statistics
+            _add_stats!(stats_total, coarse_int.stats)
+            nsolve_seq += coarse_int.stats.nsolve
         end
     end
 
@@ -106,11 +128,11 @@ function solve(prob::ODEProblem, alg;
     # combine fine solutions
     for sol_2 in sols[2:end]
         merge_solution!(merged_sol, sol_2)
-        sum_stats!(merged_sol, sol_2)
     end
 
-    # add statistics from coarse solver
-    sum_stats!(merged_sol, coarse_int.sol)
+    # set statistics
+    _reset_stats!(merged_sol.stats)
+    _add_stats!(merged_sol.stats, stats_total)
 
-    return merged_sol
+    return merged_sol, nsolve_seq
 end
