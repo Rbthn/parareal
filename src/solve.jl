@@ -9,7 +9,8 @@ function solve(prob::ODEProblem, alg;
     norm=(x, y) -> maximum(abs.(x - y)),
     maxit=parareal_intervals::Int,
     coarse_args=(),
-    fine_args=())
+    fine_args=(),
+    init_args=coarse_args)
 
     ############################################################################
     ################################   SETUP   #################################
@@ -33,6 +34,20 @@ function solve(prob::ODEProblem, alg;
     # measured by given norm
     sync_errors = fill(Inf, parareal_intervals - 1)
 
+
+    # initial coarse solve. Make sure to step to the sync points.
+    initial_int = init(prob, alg;
+        tstops=sync_points,
+        advance_to_tstop=true,
+        init_args...)
+
+    sync_values[1] = prob.u0
+    for i = 1:parareal_intervals-1
+        step!(initial_int)
+        sync_values[i+1] = copy(initial_int.sol.u[end])
+        coarse_prev[i] = copy(initial_int.sol.u[end])
+    end
+
     # coarse integrator
     coarse_int = init(prob, alg;
         tstops=sync_points,         # make sure to step to sync points exactly
@@ -44,13 +59,6 @@ function solve(prob::ODEProblem, alg;
         tstops=sync_points[i:i+1],  # make sure to step to sync points exactly
         advance_to_tstop=true,      # this makes step!() step until reaching
         fine_args...) for i = 1:parareal_intervals]
-
-    # initial coarse solve. Make sure to step to the sync points.
-    sync_values[1] = prob.u0
-    for i = 1:parareal_intervals-1
-        step!(coarse_int)
-        sync_values[i+1] = coarse_prev[i] = coarse_int.sol.u[end]
-    end
 
     ############################################################################
     ##########################   PARAREAL ITERATION   ##########################
