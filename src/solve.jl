@@ -72,8 +72,12 @@ function solve(prob::SciMLBase.ODEProblem, alg;
     ##########################   PARAREAL ITERATION   ##########################
     ############################################################################
 
+    retcode = :Default
+    iteration = 0
 
-    for iteration = 1:maxit
+    while iteration < maxit
+        iteration += 1
+
         # thread-parallel loop
         Threads.@threads for i = iteration:parareal_intervals
             fine_int = fine_ints[i]
@@ -100,6 +104,13 @@ function solve(prob::SciMLBase.ODEProblem, alg;
 
         # check for convergence
         if maximum(sync_errors) <= tol
+            retcode = :Success
+            break
+        end
+
+        # if max. iterations reached, break here. Sequential update not needed
+        if iteration >= maxit
+            retcode = :MaxIters
             break
         end
 
@@ -134,5 +145,5 @@ function solve(prob::SciMLBase.ODEProblem, alg;
     _reset_stats!(merged_sol.stats)
     _add_stats!(merged_sol.stats, stats_total)
 
-    return merged_sol, nsolve_seq
+    return merged_sol, nsolve_seq, retcode
 end
