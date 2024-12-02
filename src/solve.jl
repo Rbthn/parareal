@@ -39,34 +39,38 @@ function solve(prob::SciMLBase.ODEProblem, alg;
     stats_total = SciMLBase.DEStats()
     nsolve_seq = 0
 
-    # initial coarse solve. Make sure to step to the sync points.
-    initial_int = init(prob, alg;
-        tstops=sync_points,
-        advance_to_tstop=true,
-        init_args...)
-
     sync_values[1] = prob.u0
-    for i = 1:parareal_intervals-1
-        step!(initial_int)
-        sync_values[i+1] = copy(initial_int.sol.u[end])
-        coarse_prev[i] = copy(initial_int.sol.u[end])
+    if parareal_intervals > 1
+        # initial coarse solve. Make sure to step to the sync points.
+        initial_int = init(prob, alg;
+            tstops=sync_points,
+            advance_to_tstop=true,
+            init_args...)
+
+        for i = 1:parareal_intervals-1
+            step!(initial_int)
+            sync_values[i+1] = copy(initial_int.sol.u[end])
+            coarse_prev[i] = copy(initial_int.sol.u[end])
+        end
+
+        # add statistics from initialization
+        _add_stats!(stats_total, initial_int.stats)
+        nsolve_seq += initial_int.stats.nsolve
+
+
+        # coarse integrator
+        coarse_int = init(prob, alg;
+            tstops=sync_points,         # make sure to step to sync points exactly
+            advance_to_tstop=true,      # this makes step!() step until reaching next sync point
+            coarse_args...)
     end
-
-    # add statistics from initialization
-    _add_stats!(stats_total, initial_int.stats)
-    nsolve_seq += initial_int.stats.nsolve
-
-    # coarse integrator
-    coarse_int = init(prob, alg;
-        tstops=sync_points,         # make sure to step to sync points exactly
-        advance_to_tstop=true,      # this makes step!() step until reaching next sync point
-        coarse_args...)
 
     # fine integrators
     fine_ints = [init(prob, alg;
         tstops=sync_points[i:i+1],  # make sure to step to sync points exactly
         advance_to_tstop=true,      # this makes step!() step until reaching
         fine_args...) for i = 1:parareal_intervals]
+
 
     ############################################################################
     ##########################   PARAREAL ITERATION   ##########################
@@ -103,7 +107,7 @@ function solve(prob::SciMLBase.ODEProblem, alg;
         sync_errors[1:iteration-1] .= 0
 
         # check for convergence
-        if maximum(sync_errors) <= tol
+        if !isempty(sync_errors) && maximum(sync_errors) <= tol
             retcode = :Success
             break
         end
