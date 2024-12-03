@@ -178,28 +178,26 @@ function solve_dist(
         coarse_result = initial_int.sol.u[end]
 
         # push result to worker
+        wait_for_empty(info_channels[interval+1])
         put!(data_channels[interval+1], coarse_result)
         put!(info_channels[interval+1], 1)
 
         sync_values[interval+1] = coarse_result
         coarse_prev[interval] = coarse_result
     end
-    iteration = 0
-
 
     # we wait for fine integrators to finish
     for interval = 1:parareal_intervals
-        signal = nothing
-        while signal != 0
-            sleep(1)
-            signal = fetch(info_channels[interval])
-        end
+        wait_for_signal(info_channels[interval], 0)
     end
 
 
     ############################################################################
     ##########################   SEQUENTIAL UPDATE    ##########################
     ############################################################################
+
+    iteration = 0
+
     while iteration < maxit
         iteration += 1
 
@@ -212,12 +210,7 @@ function solve_dist(
             coarse_result = coarse_int.sol.u[end]
 
             # make sure fine result is available
-            signal = nothing
-            while signal != 0
-                sleep(1)
-                signal = fetch(info_channels[interval])
-            end
-            take!(info_channels[interval])
+            wait_for_signal(info_channels[interval], 0, clear=true)
 
             # get result
             fine_result = take!(data_channels[interval])
@@ -233,12 +226,7 @@ function solve_dist(
         end
 
         # take last result. Not required for update, but will mess up control flow otherwise
-        signal = nothing
-        while signal != 0
-            sleep(1)
-            signal = fetch(info_channels[parareal_intervals])
-        end
-        take!(info_channels[parareal_intervals])
+        wait_for_signal(info_channels[parareal_intervals], 0, clear=true)
 
         # get result
         take!(data_channels[parareal_intervals])
@@ -253,12 +241,9 @@ function solve_dist(
         # update for next iteration
         for interval = iteration+1:parareal_intervals
             # make sure we can write
-            signal = false
-            while !signal
-                sleep(1)
-                signal = !isready(info_channels[interval])
-            end
+            wait_for_empty(info_channels[interval])
 
+            # write data
             put!(data_channels[interval], sync_values[interval])
             put!(info_channels[interval], 1)
         end
@@ -266,6 +251,7 @@ function solve_dist(
         # parareal exactness: signal that we're done
         sync_errors[1:iteration] .= 0
         for interval = 1:iteration
+            wait_for_empty(info_channels[interval])
             put!(info_channels[interval], -1)
         end
     end

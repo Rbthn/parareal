@@ -1,4 +1,5 @@
 import SciMLBase
+using Distributed
 
 """
     Merge contents of sol_2 into sol_1.
@@ -38,5 +39,44 @@ function _reset_stats!(stat::SciMLBase.DEStats)
         value = getfield(stat, field)
         setfield!(stat, field, zero(value))
     end
+    return nothing
+end
+
+"""
+    idle-wait on RemoteChannel `ch` until given signal `sig` is observed.
+    Once observed, clear the signal from the channel iff `clear` is given, then return.
+"""
+function wait_for_signal(ch::RemoteChannel, sig; sleep_sec::Int=1, clear=false)
+    while true
+        observed = fetch(ch)
+
+        if observed == sig
+            break
+        else
+            sleep(sleep_sec)
+        end
+    end
+
+    if clear
+        take!(ch)
+    end
+
+    return nothing
+end
+
+"""
+    idle-wait until RemoteChannel `ch` is empty.
+"""
+function wait_for_empty(ch::RemoteChannel; sleep_sec::Int=1)
+    while true
+        empty = !isready(ch)
+
+        if empty
+            break
+        else
+            sleep(sleep_sec)
+        end
+    end
+
     return nothing
 end
