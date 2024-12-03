@@ -5,3 +5,9 @@ version = "0.1.0-DEV"
 
 [deps]
 DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+
+[compat]
+Distributed = "1.11.0"
+SciMLBase = "2.65.1"
