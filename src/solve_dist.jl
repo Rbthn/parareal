@@ -126,6 +126,12 @@ function solve_dist(
     # measured by given norm
     sync_errors = fill(Inf, parareal_intervals - 1)
 
+    initial_int = init(prob, alg;
+        tstops=sync_points,
+        advance_to_tstop=true,
+        init_args...
+    )
+
     coarse_int = init(prob, alg;
         tstops=sync_points,
         advance_to_tstop=true,
@@ -164,12 +170,12 @@ function solve_dist(
     # handle first interval
     put!(data_channels[1], sync_values[1])
     put!(info_channels[1], 1)
-    reinit!(coarse_int, sync_values[1], t0=sync_points[1])
+    reinit!(initial_int, sync_values[1], t0=sync_points[1])
 
     for interval = 1:parareal_intervals-1
-        # coarse integration
-        step!(coarse_int)
-        coarse_result = coarse_int.sol.u[end]
+        # initial integration
+        step!(initial_int)
+        coarse_result = initial_int.sol.u[end]
 
         # push result to worker
         put!(data_channels[interval+1], coarse_result)
