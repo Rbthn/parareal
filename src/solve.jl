@@ -122,9 +122,11 @@ function solve(prob::SciMLBase.ODEProblem, alg;
         for i = iteration:parareal_intervals-1
             reinit!(coarse_int, sync_values[i], t0=sync_points[i])
             step!(coarse_int)
+            coarse_res = coarse_int.sol.u[end]
 
             # update equation
-            sync_values[i+1] = coarse_int.u + fine_ints[i].u - coarse_prev[i]
+            sync_values[i+1] = coarse_res + fine_ints[i].u - coarse_prev[i]
+            coarse_prev[i] = coarse_res
 
             # add statistics
             _add_stats!(stats_total, coarse_int.stats)
