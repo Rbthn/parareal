@@ -80,3 +80,17 @@ function wait_for_empty(ch::RemoteChannel; sleep_sec::Int=1)
 
     return nothing
 end
+
+"""
+    Write signal `sig` into RemoteChannel `ch`.
+    If `ch` is empty, write right away.
+    If not, clear one element, then write.
+"""
+function force_signal(ch::RemoteChannel, sig)
+    if !isready(ch)
+        put!(ch, sig)
+    else
+        take!(ch)
+        put!(ch, sig)
+    end
+end

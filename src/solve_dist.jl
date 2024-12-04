@@ -2,6 +2,10 @@ import SciMLBase
 using DifferentialEquations
 using Distributed
 
+const SIGNAL_WORKER = 1
+const SIGNAL_CONTROL = 0
+const SIGNAL_DONE = -1
+
 """
     Helper function called on each worker.
     Receives updated initial values from control node,
@@ -40,9 +44,9 @@ function solve_dist_worker(
         # 0: control node's turn to perform coarse update
         # 1: our turn to perform fine integration
         # -1: this node is done
-        if signal == -1
+        if signal == SIGNAL_DONE
             break
-        elseif signal == 1
+        elseif signal == SIGNAL_WORKER
             take!(info_channel)
             iteration += 1
 
@@ -54,8 +58,8 @@ function solve_dist_worker(
 
             # write result to coarse channel. Used for update equation
             put!(data_channel, int.sol.u[end])
-            put!(info_channel, 0)
-        elseif signal == 0
+            put!(info_channel, SIGNAL_CONTROL)
+        elseif signal == SIGNAL_CONTROL
             sleep(1)
             continue
         else
@@ -169,7 +173,7 @@ function solve_dist(
 
     # handle first interval
     put!(data_channels[1], sync_values[1])
-    put!(info_channels[1], 1)
+    put!(info_channels[1], SIGNAL_WORKER)
     reinit!(initial_int, sync_values[1], t0=sync_points[1])
 
     for interval = 1:parareal_intervals-1
@@ -180,7 +184,7 @@ function solve_dist(
         # push result to worker
         wait_for_empty(info_channels[interval+1])
         put!(data_channels[interval+1], coarse_result)
-        put!(info_channels[interval+1], 1)
+        put!(info_channels[interval+1], SIGNAL_WORKER)
 
         sync_values[interval+1] = coarse_result
         coarse_prev[interval] = coarse_result
@@ -188,7 +192,7 @@ function solve_dist(
 
     # we wait for fine integrators to finish
     for interval = 1:parareal_intervals
-        wait_for_signal(info_channels[interval], 0)
+        wait_for_signal(info_channels[interval], SIGNAL_CONTROL)
     end
 
 
@@ -210,7 +214,7 @@ function solve_dist(
             coarse_result = coarse_int.sol.u[end]
 
             # make sure fine result is available
-            wait_for_signal(info_channels[interval], 0, clear=true)
+            wait_for_signal(info_channels[interval], SIGNAL_CONTROL, clear=true)
 
             # get result
             fine_result = take!(data_channels[interval])
@@ -226,7 +230,7 @@ function solve_dist(
         end
 
         # take last result. Not required for update, but will mess up control flow otherwise
-        wait_for_signal(info_channels[parareal_intervals], 0, clear=true)
+        wait_for_signal(info_channels[parareal_intervals], SIGNAL_CONTROL, clear=true)
 
         # get result
         take!(data_channels[parareal_intervals])
@@ -245,17 +249,18 @@ function solve_dist(
 
             # write data
             put!(data_channels[interval], sync_values[interval])
-            put!(info_channels[interval], 1)
+            put!(info_channels[interval], SIGNAL_WORKER)
         end
 
         # parareal exactness: signal that we're done
         sync_errors[1:iteration] .= 0
         for interval = 1:iteration
             wait_for_empty(info_channels[interval])
-            put!(info_channels[interval], -1)
+            put!(info_channels[interval], SIGNAL_DONE)
         end
     end
 
+    force_signal.(info_channels, SIGNAL_DONE)
 
     ## TODO stitch solutions
 
