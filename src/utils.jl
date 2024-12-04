@@ -46,7 +46,7 @@ end
     idle-wait on RemoteChannel `ch` until given signal `sig` is observed.
     Once observed, clear the signal from the channel iff `clear` is given, then return.
 """
-function wait_for_signal(ch::RemoteChannel, sig; sleep_sec::Int=1, clear=false)
+function wait_for_signal(ch::RemoteChannel, sig; sleep_sec::Real=1e-3, clear=false)
     while true
         observed = fetch(ch)
 
@@ -67,7 +67,7 @@ end
 """
     idle-wait until RemoteChannel `ch` is empty.
 """
-function wait_for_empty(ch::RemoteChannel; sleep_sec::Int=1)
+function wait_for_empty(ch::RemoteChannel; sleep_sec::Real=1e-3)
     while true
         empty = !isready(ch)
 

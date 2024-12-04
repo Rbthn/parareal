@@ -60,10 +60,10 @@ function solve_dist_worker(
             put!(data_channel, int.sol.u[end])
             put!(info_channel, SIGNAL_CONTROL)
         elseif signal == SIGNAL_CONTROL
-            sleep(1)
+            sleep(1e-3)
             continue
         else
-            sleep(1)
+            sleep(1e-3)
             continue
         end
     end
