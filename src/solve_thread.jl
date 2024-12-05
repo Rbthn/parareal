@@ -25,6 +25,7 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
     # solution values at sync points. These are modified in the
     # parareal update eqn. and used as initial values in subsequent iterations.
     sync_values = Vector{typeof(prob.u0)}(undef, parareal_intervals)
+    sync_values[1] = prob.u0
 
     # results of coarse propagator at sync points from prev. iteration.
     # saved to avoid re-computing.
@@ -40,7 +41,6 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
     stats_total = SciMLBase.DEStats()
     nsolve_seq = 0
 
-    sync_values[1] = prob.u0
     if parareal_intervals > 1
         # initial coarse solve. Make sure to step to the sync points.
         initial_int = init(prob, alg;
