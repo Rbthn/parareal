@@ -15,7 +15,6 @@ function solve_dist_worker(
     prob::ODEProblem,
     alg,
     interval::Int;
-    parareal_intervals::Int,
     maxit::Int,
     info_channel::RemoteChannel,
     data_channel::RemoteChannel,
@@ -37,19 +36,21 @@ function solve_dist_worker(
     ##########################   PARAREAL ITERATION   ##########################
     ############################################################################
     iteration = 0
-    while iteration < maxit
+    limit = min(maxit, interval)
+    while iteration < limit
         # wait for signal from control node
         signal = fetch(info_channel)
 
-        # 0: control node's turn to perform coarse update
-        # 1: our turn to perform fine integration
-        # -1: this node is done
         if signal == SIGNAL_DONE
             break
         elseif signal == SIGNAL_WORKER
+            # clear signal
             take!(info_channel)
+
+            # increment counter
             iteration += 1
 
+            # receive initial value from control node
             initial_value = take!(data_channel)
 
             # fine integration
@@ -94,11 +95,8 @@ function solve_dist(
         worker_map[i] = workers()[i]
     end
 
+
     # set up info channel to each worker. Signals what to do with values in data_channel.
-    # only holds one integer:
-    #   1: worker's turn to read result, do computation, write result
-    #   0: control node's turn to read  result, do computation, write result
-    #   -1: algorithm terminated, worker should return
     info_channels = [RemoteChannel(
         () -> Channel{Int}(1), myid()
     ) for _ = 1:parareal_intervals]
@@ -107,6 +105,10 @@ function solve_dist(
     data_channels = [RemoteChannel(
         () -> Channel{typeof(prob.u0)}(1), myid()
     ) for _ = 1:parareal_intervals]
+
+    # vector of Futures for the function calls to workers.
+    # Each worker will return its full solution via this Future
+    worker_futures = Vector{Future}(undef, parareal_intervals)
 
 
     ############################################################################
@@ -148,19 +150,12 @@ function solve_dist(
     for interval = 1:parareal_intervals
         id = worker_map[interval]
 
-        # coarse channel
-        data_ch = data_channels[interval]
-
-        # info channel
-        info_ch = info_channels[interval]
-
-        @spawnat id solve_dist_worker(
+        worker_futures[interval] = @spawnat id solve_dist_worker(
             prob, alg,
             interval;
-            parareal_intervals=parareal_intervals,
             maxit=maxit,
-            info_channel=info_ch,
-            data_channel=data_ch,
+            info_channel=info_channels[interval],
+            data_channel=data_channels[interval],
             t_0=sync_points[interval],
             t_end=sync_points[interval+1],
             fine_args...
@@ -262,7 +257,16 @@ function solve_dist(
 
     force_signal.(info_channels, SIGNAL_DONE)
 
-    ## TODO stitch solutions
+    ############################################################################
+    ##########################   COMBINE SOLUTIONS   ###########################
+    ############################################################################
+    merged_sol = fetch(worker_futures[1])
 
-    return nothing
+    # TODO should we fetch all solutions first?
+    for interval = 2:parareal_intervals
+        sol = fetch(worker_futures[interval])
+        merge_solution!(merged_sol, sol)
+    end
+
+    return merged_sol
 end
