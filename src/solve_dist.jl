@@ -248,16 +248,11 @@ function solve_dist(
             put!(info_channels[interval], SIGNAL_WORKER)
         end
 
-        # parareal exactness: signal that we're done
-        sync_errors[1:iteration] .= 0
-        for interval = 1:iteration
-            wait_for_empty(info_channels[interval])
-            put!(info_channels[interval], SIGNAL_DONE)
-        end
         iteration += 1
     end
 
-    force_signal.(info_channels, SIGNAL_DONE)
+    # tell workers we are done
+    force_signal.(info_channels[iteration+1:parareal_intervals], SIGNAL_DONE)
 
     ############################################################################
     ##########################   COMBINE SOLUTIONS   ###########################
