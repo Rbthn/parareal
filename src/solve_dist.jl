@@ -201,8 +201,17 @@ function solve_dist(
         iteration += 1
 
 
-        # can we skip coarse integration for interval iteration?
-        for interval = iteration:parareal_intervals-1
+        # first active interval is exact now.
+        # no coarse integration, no update equation
+        wait_for_signal(info_channels[iteration], SIGNAL_CONTROL, clear=true)
+        fine_result = take!(data_channels[iteration])
+        sync_errors[iteration] = 0  # parareal exactness
+        sync_values[iteration+1] = fine_result
+        # tell worker to stop
+        wait_for_empty(info_channels[iteration])
+        put!(info_channels[iteration], SIGNAL_DONE)
+
+        for interval = iteration+1:parareal_intervals-1
             # coarse integration
             reinit!(coarse_int, sync_values[interval], t0=sync_points[interval])
             step!(coarse_int)
