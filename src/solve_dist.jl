@@ -185,12 +185,6 @@ function solve_dist(
         coarse_prev[interval] = coarse_result
     end
 
-    # we wait for fine integrators to finish
-    for interval = 1:parareal_intervals
-        wait_for_signal(info_channels[interval], SIGNAL_CONTROL)
-    end
-
-
     ############################################################################
     ##########################   SEQUENTIAL UPDATE    ##########################
     ############################################################################
