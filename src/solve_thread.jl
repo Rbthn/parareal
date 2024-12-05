@@ -78,11 +78,10 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
     ############################################################################
 
     retcode = :Default
-    iteration = 0
+    iteration = 1
+    maxit = min(maxit, parareal_intervals)
 
     while iteration < maxit
-        iteration += 1
-
         # thread-parallel loop
         Threads.@threads for i = iteration:parareal_intervals
             fine_int = fine_ints[i]
@@ -133,6 +132,8 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
             _add_stats!(stats_total, coarse_int.stats)
             nsolve_seq += coarse_int.stats.nsolve
         end
+
+        iteration += 1
     end
 
 

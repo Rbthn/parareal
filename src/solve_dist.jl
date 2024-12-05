@@ -189,12 +189,10 @@ function solve_dist(
     ##########################   SEQUENTIAL UPDATE    ##########################
     ############################################################################
 
-    iteration = 0
+    iteration = 1
+    maxit = min(maxit, parareal_intervals)
 
     while iteration < maxit
-        iteration += 1
-
-
         # first active interval is exact now.
         # no coarse integration, no update equation
         wait_for_signal(info_channels[iteration], SIGNAL_CONTROL, clear=true)
@@ -256,6 +254,7 @@ function solve_dist(
             wait_for_empty(info_channels[interval])
             put!(info_channels[interval], SIGNAL_DONE)
         end
+        iteration += 1
     end
 
     force_signal.(info_channels, SIGNAL_DONE)
