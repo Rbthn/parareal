@@ -90,9 +90,10 @@ function solve_dist(
     ############################################################################
     ###########################   SETUP DISTRIBUTED   ##########################
     ############################################################################
+    worker_num = nworkers()
     worker_map = Dict{Int,Int}()
     for i = 1:parareal_intervals
-        worker_map[i] = workers()[i]
+        worker_map[i] = workers()[(i-1)%worker_num+1]
     end
 
 
