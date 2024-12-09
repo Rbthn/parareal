@@ -104,9 +104,6 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
         end
         nsolve_seq += nsolve_fine_max
 
-        # parareal exactness
-        sync_errors[1:iteration-1] .= 0
-
         # check for convergence
         if !isempty(sync_errors) && maximum(sync_errors) <= tol
             retcode = :Success
@@ -119,8 +116,13 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
             break
         end
 
+        # first active interval is exact now.
+        # no coarse integration, no update equation
+        sync_errors[iteration] = 0
+        sync_values[iteration+1] = fine_ints[iteration].sol.u[end]
+
         # sequential coarse solve
-        for i = iteration:parareal_intervals-1
+        for i = iteration+1:parareal_intervals-1
             _reset_stats!(coarse_int.sol.stats)
             reinit!(coarse_int, sync_values[i], t0=sync_points[i])
             step!(coarse_int)
