@@ -54,6 +54,7 @@ function solve_dist_worker(
             initial_value = take!(data_channel)
 
             # fine integration
+            # don't reset stats here - total work counted at the end
             reinit!(int, initial_value, t0=t_0)
             step!(int)
 
@@ -133,6 +134,9 @@ function solve_dist(
     # measured by given norm
     sync_errors = fill(Inf, parareal_intervals - 1)
 
+    # statistics
+    stats_total = SciMLBase.DEStats()
+
     initial_int = init(prob, alg;
         tstops=sync_points,
         advance_to_tstop=true,
@@ -186,6 +190,9 @@ function solve_dist(
         coarse_prev[interval] = coarse_result
     end
 
+    # add statistics from initialization
+    _add_stats!(stats_total, initial_int.sol.stats)
+
     ############################################################################
     ##########################   SEQUENTIAL UPDATE    ##########################
     ############################################################################
@@ -206,6 +213,8 @@ function solve_dist(
 
         for interval = iteration+1:parareal_intervals-1
             # coarse integration
+            # reseting the integrator does not reset the statistics!
+            _reset_stats!(coarse_int.sol.stats)
             reinit!(coarse_int, sync_values[interval], t0=sync_points[interval])
             step!(coarse_int)
             coarse_result = coarse_int.sol.u[end]
@@ -224,6 +233,9 @@ function solve_dist(
 
             # set coarse_prev for next iteration
             coarse_prev[interval] = coarse_result
+
+            # add statistics
+            _add_stats!(stats_total, coarse_int.sol.stats)
         end
 
         # take last result. Not required for update, but will mess up control flow otherwise
@@ -252,19 +264,31 @@ function solve_dist(
         iteration += 1
     end
 
+    # asynchronous task: merge full results
+    #   depending on parareal settings, some to most workers finish early.
+    #   transferring full solution and merging it to the overall solution
+    #   can be done while the control node is waiting for other workers.
+    merge = Threads.@spawn begin
+        merged_sol = fetch(worker_futures[1])
+        _add_stats!(stats_total, merged_sol.stats)
+
+        for interval = 2:parareal_intervals
+            sol = fetch(worker_futures[interval])
+            _add_stats!(stats_total, sol.stats)
+            merge_solution!(merged_sol, sol)
+        end
+
+        _reset_stats!(merged_sol.stats)
+        _add_stats!(merged_sol.stats, stats_total)
+        return merged_sol
+    end
+
     # tell workers we are done
     force_signal.(info_channels[iteration+1:parareal_intervals], SIGNAL_DONE)
 
     ############################################################################
     ##########################   COMBINE SOLUTIONS   ###########################
     ############################################################################
-    merged_sol = fetch(worker_futures[1])
 
-    # TODO should we fetch all solutions first?
-    for interval = 2:parareal_intervals
-        sol = fetch(worker_futures[interval])
-        merge_solution!(merged_sol, sol)
-    end
-
-    return merged_sol
+    return fetch(merge), iteration
 end
