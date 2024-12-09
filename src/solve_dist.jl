@@ -61,6 +61,7 @@ function solve_dist_worker(
             # write result to coarse channel. Used for update equation
             put!(data_channel, int.sol.u[end])
             put!(info_channel, SIGNAL_CONTROL)
+            continue
         elseif signal == SIGNAL_CONTROL
             sleep(1e-3)
             continue
@@ -194,7 +195,7 @@ function solve_dist(
     _add_stats!(stats_total, initial_int.sol.stats)
 
     ############################################################################
-    ##########################   SEQUENTIAL UPDATE    ##########################
+    ##############################   MAIN LOOP    ##############################
     ############################################################################
 
     iteration = 1
