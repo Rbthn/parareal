@@ -55,7 +55,7 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
         end
 
         # add statistics from initialization
-        _add_stats!(stats_total, initial_int.stats)
+        _add_stats!(stats_total, initial_int.sol.stats)
         nsolve_seq += initial_int.stats.nsolve
 
 
@@ -85,6 +85,7 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
         # thread-parallel loop
         Threads.@threads for i = iteration:parareal_intervals
             fine_int = fine_ints[i]
+            _reset_stats!(fine_int.sol.stats)
             reinit!(fine_int, sync_values[i], t0=sync_points[i])
             step!(fine_int)
 
@@ -96,7 +97,7 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
         # add statistics
         nsolve_fine_max = 0
         for i = iteration:parareal_intervals
-            stat = fine_ints[i].stats
+            stat = fine_ints[i].sol.stats
             _add_stats!(stats_total, stat)
 
             nsolve_fine_max = max(nsolve_fine_max, stat.nsolve)
@@ -120,6 +121,7 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
 
         # sequential coarse solve
         for i = iteration:parareal_intervals-1
+            _reset_stats!(coarse_int.sol.stats)
             reinit!(coarse_int, sync_values[i], t0=sync_points[i])
             step!(coarse_int)
             coarse_res = coarse_int.sol.u[end]
@@ -129,7 +131,7 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
             coarse_prev[i] = coarse_res
 
             # add statistics
-            _add_stats!(stats_total, coarse_int.stats)
+            _add_stats!(stats_total, coarse_int.sol.stats)
             nsolve_seq += coarse_int.stats.nsolve
         end
 
@@ -145,13 +147,13 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
     merged_sol = sols[1]
 
     # combine fine solutions
-    for sol_2 in sols[2:end]
-        merge_solution!(merged_sol, sol_2)
+    for sol in sols[2:end]
+        merge_solution!(merged_sol, sol)
     end
 
     # set statistics
     _reset_stats!(merged_sol.stats)
     _add_stats!(merged_sol.stats, stats_total)
 
-    return merged_sol, nsolve_seq, retcode
+    return merged_sol, iteration, nsolve_seq
 end
