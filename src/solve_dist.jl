@@ -16,8 +16,8 @@ function solve_dist_worker(
     alg,
     interval::Int;
     maxit::Int,
-    info_channel::RemoteChannel,
-    data_channel::RemoteChannel,
+    info_channel::Union{Channel,RemoteChannel},
+    data_channel::Union{Channel,RemoteChannel},
     t_0::Float64,
     t_end::Float64,
     kwargs...)
