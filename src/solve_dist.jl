@@ -77,9 +77,19 @@ end
 """
     Main function called on control node.
     Performs sequential integration, waits for workers to finish parallel integration, then applies update formula.
+
+    If `shared_memory` is set to `true` (default), parallel integration is
+    performed using thread-parallel workers (on the same machine). This
+    approach requires at least `parareal_intervals` processsors for optimal
+    performance.
+    Otherwise, parallel integration is performed using distributed workers
+    (separate julia processes which may be on different machines). This
+    approach does not exploit shared memory and is thus expected to be slower
+    when run on a single machine.
 """
 function solve_dist(
     prob::ODEProblem, alg;
+    shared_memory=true,
     parareal_intervals::Int,
     tol=1e-3::Float64,
     norm=(x, y) -> maximum(abs.(x - y)),
@@ -92,26 +102,34 @@ function solve_dist(
     ############################################################################
     ###########################   SETUP DISTRIBUTED   ##########################
     ############################################################################
-    worker_num = nworkers()
-    worker_map = Dict{Int,Int}()
-    for i = 1:parareal_intervals
-        worker_map[i] = workers()[(i-1)%worker_num+1]
+    if !shared_memory
+        worker_num = nworkers()
+        worker_map = Dict{Int,Int}()
+        for i = 1:parareal_intervals
+            worker_map[i] = workers()[(i-1)%worker_num+1]
+        end
     end
 
 
     # set up info channel to each worker. Signals what to do with values in data_channel.
-    info_channels = [RemoteChannel(
-        () -> Channel{Int}(1), myid()
-    ) for _ = 1:parareal_intervals]
+    info_channels = [
+        shared_memory ?
+        Channel{Int}(1) :
+        RemoteChannel(() -> Channel{Int}(1), myid())
+        for _ = 1:parareal_intervals]
 
     # set up channel for coarse result for each worker.
-    data_channels = [RemoteChannel(
-        () -> Channel{typeof(prob.u0)}(1), myid()
-    ) for _ = 1:parareal_intervals]
+    data_channels = [
+        shared_memory ?
+        Channel{typeof(prob.u0)}(1) :
+        RemoteChannel(() -> Channel{typeof(prob.u0)}(1), myid())
+        for _ = 1:parareal_intervals]
 
     # vector of Futures for the function calls to workers.
     # Each worker will return its full solution via this Future
-    worker_futures = Vector{Future}(undef, parareal_intervals)
+    worker_futures = shared_memory ?
+                     Vector{Task}(undef, parareal_intervals) :
+                     Vector{Future}(undef, parareal_intervals)
 
 
     ############################################################################
@@ -154,9 +172,8 @@ function solve_dist(
     ############################   START WORKERS    ############################
     ############################################################################
     for interval = 1:parareal_intervals
-        id = worker_map[interval]
-
-        worker_futures[interval] = @spawnat id solve_dist_worker(
+        # function call on worker
+        fn = () -> solve_dist_worker(
             prob, alg,
             interval;
             maxit=maxit,
@@ -166,6 +183,12 @@ function solve_dist(
             t_end=sync_points[interval+1],
             fine_args...
         )
+
+        if shared_memory
+            worker_futures[interval] = @async fn()
+        else
+            worker_futures[interval] = @spawnat worker_map[interval] fn()
+        end
     end
 
     ############################################################################
