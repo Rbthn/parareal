@@ -81,7 +81,7 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
     iteration = 1
     maxit = min(maxit, parareal_intervals)
 
-    while iteration < maxit
+    while iteration <= maxit
         # thread-parallel loop
         Threads.@threads for i = iteration:parareal_intervals
             fine_int = fine_ints[i]
@@ -105,7 +105,7 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
         nsolve_seq += nsolve_fine_max
 
         # check for convergence
-        if !isempty(sync_errors) && maximum(sync_errors) <= tol
+        if !isempty(sync_errors) && maximum(sync_errors) < tol
             retcode = :Success
             break
         end
@@ -157,5 +157,8 @@ function solve_thread(prob::SciMLBase.ODEProblem, alg;
     _reset_stats!(merged_sol.stats)
     _add_stats!(merged_sol.stats, stats_total)
 
-    return merged_sol, iteration, nsolve_seq
+    # collect info
+    info = (; nsolve_seq=nsolve_seq, retcode=retcode, iterations=iteration)
+
+    return merged_sol, info
 end

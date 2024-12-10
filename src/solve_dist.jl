@@ -198,10 +198,17 @@ function solve_dist(
     ##############################   MAIN LOOP    ##############################
     ############################################################################
 
+    retcode = :Default
     iteration = 1
     maxit = min(maxit, parareal_intervals)
 
-    while iteration < maxit
+    while iteration <= maxit
+        # if max. iterations reached, break here. Sequential update not needed
+        if iteration >= maxit
+            retcode = :MaxIters
+            break
+        end
+
         # first active interval is exact now.
         # no coarse integration, no update equation
         wait_for_signal(info_channels[iteration], SIGNAL_CONTROL, clear=true)
@@ -249,6 +256,7 @@ function solve_dist(
         max_err = maximum(sync_errors)
 
         if max_err < tol
+            retcode = :MaxIters
             break
         end
 
@@ -264,6 +272,10 @@ function solve_dist(
 
         iteration += 1
     end
+
+    ############################################################################
+    ##########################   COMBINE SOLUTIONS   ###########################
+    ############################################################################
 
     # asynchronous task: merge full results
     #   depending on parareal settings, some to most workers finish early.
@@ -287,9 +299,8 @@ function solve_dist(
     # tell workers we are done
     force_signal.(info_channels[iteration+1:parareal_intervals], SIGNAL_DONE)
 
-    ############################################################################
-    ##########################   COMBINE SOLUTIONS   ###########################
-    ############################################################################
+    # collect info
+    info = (; retcode=retcode, iterations=iteration)
 
-    return fetch(merge), iteration
+    return fetch(merge), info
 end
