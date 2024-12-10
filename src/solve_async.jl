@@ -11,7 +11,7 @@ const SIGNAL_DONE = -1
     Receives updated initial values from control node,
     performs integration and sends end value back to control node.
 """
-function solve_dist_worker(
+function solve_async_worker(
     prob::ODEProblem,
     alg,
     interval::Int;
@@ -87,7 +87,7 @@ end
     approach does not exploit shared memory and is thus expected to be slower
     when run on a single machine.
 """
-function solve_dist(
+function solve_async(
     prob::ODEProblem, alg;
     shared_memory=true,
     parareal_intervals::Int,
@@ -173,7 +173,7 @@ function solve_dist(
     ############################################################################
     for interval = 1:parareal_intervals
         # function call on worker
-        fn = () -> solve_dist_worker(
+        fn = () -> solve_async_worker(
             prob, alg,
             interval;
             maxit=maxit,

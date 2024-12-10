@@ -5,7 +5,7 @@ using DifferentialEquations
     Solve ODEProblem using the Parareal algorithm.
     Use thread-parallel for-loop for parallel integration.
 """
-function solve_thread(prob::SciMLBase.ODEProblem, alg;
+function solve_sync(prob::SciMLBase.ODEProblem, alg;
     parareal_intervals::Int,
     tol=1e-3::Float64,
     norm=(x, y) -> maximum(abs.(x - y)),
