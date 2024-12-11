@@ -12,7 +12,9 @@ function solve_sync(prob::SciMLBase.ODEProblem, alg;
     maxit=parareal_intervals::Int,
     coarse_args=(),
     fine_args=(),
-    init_args=coarse_args)
+    init_args=coarse_args,
+    kwargs...
+)
 
     ############################################################################
     ################################   SETUP   #################################
@@ -46,7 +48,9 @@ function solve_sync(prob::SciMLBase.ODEProblem, alg;
         initial_int = init(prob, alg;
             tstops=sync_points,
             advance_to_tstop=true,
-            init_args...)
+            kwargs...,
+            init_args...,
+        )
 
         for i = 1:parareal_intervals-1
             step!(initial_int)
@@ -63,14 +67,18 @@ function solve_sync(prob::SciMLBase.ODEProblem, alg;
         coarse_int = init(prob, alg;
             tstops=sync_points,         # make sure to step to sync points exactly
             advance_to_tstop=true,      # this makes step!() step until reaching next sync point
-            coarse_args...)
+            kwargs...,
+            coarse_args...,
+        )
     end
 
     # fine integrators
     fine_ints = [init(prob, alg;
         tstops=sync_points[i:i+1],  # make sure to step to sync points exactly
         advance_to_tstop=true,      # this makes step!() step until reaching
-        fine_args...) for i = 1:parareal_intervals]
+        kwargs...,
+        fine_args...,
+    ) for i = 1:parareal_intervals]
 
 
     ############################################################################

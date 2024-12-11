@@ -96,7 +96,8 @@ function solve_async(
     maxit=parareal_intervals::Int,
     coarse_args=(),
     fine_args=(),
-    init_args=coarse_args
+    init_args=coarse_args,
+    kwargs...
 )
 
     ############################################################################
@@ -159,13 +160,15 @@ function solve_async(
     initial_int = init(prob, alg;
         tstops=sync_points,
         advance_to_tstop=true,
-        init_args...
+        kwargs...,
+        init_args...,
     )
 
     coarse_int = init(prob, alg;
         tstops=sync_points,
         advance_to_tstop=true,
-        coarse_args...
+        kwargs...,
+        coarse_args...,
     )
 
     ############################################################################
@@ -181,7 +184,8 @@ function solve_async(
             data_channel=data_channels[interval],
             t_0=sync_points[interval],
             t_end=sync_points[interval+1],
-            fine_args...
+            kwargs...,
+            fine_args...,
         )
 
         if shared_memory
