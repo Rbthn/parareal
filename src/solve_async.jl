@@ -91,7 +91,8 @@ function solve_async(
     prob::ODEProblem, alg;
     shared_memory=true,
     parareal_intervals::Int,
-    tol=1e-3::Float64,
+    reltol=1e-3::Float64,
+    abstol=1e-6::Float64,
     norm=(x, y) -> maximum(abs.(x - y)),
     maxit=parareal_intervals::Int,
     coarse_args=(),
@@ -152,7 +153,8 @@ function solve_async(
 
     # errors at sync points. Difference between left and right solution,
     # measured by given norm
-    sync_errors = fill(Inf, parareal_intervals - 1)
+    sync_errors_abs = fill(Inf, parareal_intervals - 1)
+    sync_errors_rel = fill(Inf, parareal_intervals - 1)
 
     # statistics
     stats_total = SciMLBase.DEStats()
@@ -240,7 +242,8 @@ function solve_async(
         # no coarse integration, no update equation
         wait_for_signal(info_channels[iteration], SIGNAL_CONTROL, clear=true)
         fine_result = take!(data_channels[iteration])
-        sync_errors[iteration] = 0  # parareal exactness
+        # parareal exactness
+        sync_errors_abs[iteration] = sync_errors_rel[iteration] = 0
         sync_values[iteration+1] = fine_result
         # tell worker to stop
         wait_for_empty(info_channels[iteration])
@@ -261,7 +264,8 @@ function solve_async(
             fine_result = take!(data_channels[interval])
 
             # sync error
-            sync_errors[interval] = norm(sync_values[interval+1], fine_result)
+            sync_errors_abs[interval] = norm(sync_values[interval+1], fine_result)
+            sync_errors_rel[interval] = sync_errors_abs[interval] / norm(zeros(size(fine_result)), fine_result)
 
             # update equation
             sync_values[interval+1] = coarse_result + fine_result - coarse_prev[interval]
@@ -279,11 +283,8 @@ function solve_async(
         # get result
         take!(data_channels[parareal_intervals])
 
-        # check for convergence
-        max_err = maximum(sync_errors)
-
-        if max_err < tol
-            retcode = :MaxIters
+        if maximum(sync_errors_abs) < abstol || maximum(sync_errors_rel) < reltol
+            retcode = :Success
             break
         end
 
@@ -323,11 +324,14 @@ function solve_async(
         return merged_sol
     end
 
+    # wait
+    sol = fetch(merge)
+
     # tell workers we are done
     force_signal.(info_channels[iteration+1:parareal_intervals], SIGNAL_DONE)
 
     # collect info
-    info = (; retcode=retcode, iterations=iteration)
+    info = (; retcode=retcode, iterations=iteration, abs_error=maximum(sync_errors_abs), rel_error=maximum(sync_errors_rel))
 
-    return fetch(merge), info
+    return sol, info
 end

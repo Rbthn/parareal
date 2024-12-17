@@ -7,7 +7,8 @@ using DifferentialEquations
 """
 function solve_sync(prob::SciMLBase.ODEProblem, alg;
     parareal_intervals::Int,
-    tol=1e-3::Float64,
+    reltol=1e-3::Float64,
+    abstol=1e-6::Float64,
     norm=(x, y) -> maximum(abs.(x - y)),
     maxit=parareal_intervals::Int,
     coarse_args=(),
@@ -37,7 +38,8 @@ function solve_sync(prob::SciMLBase.ODEProblem, alg;
 
     # errors at sync points. Difference between left and right solution,
     # measured by given norm
-    sync_errors = fill(Inf, parareal_intervals - 1)
+    sync_errors_abs = fill(Inf, parareal_intervals - 1)
+    sync_errors_rel = fill(Inf, parareal_intervals - 1)
 
     # statistics
     stats_total = SciMLBase.DEStats()
@@ -97,8 +99,10 @@ function solve_sync(prob::SciMLBase.ODEProblem, alg;
             reinit!(fine_int, sync_values[i], t0=sync_points[i])
             step!(fine_int)
 
+            fine_result = fine_int.sol.u[end]
             if i != parareal_intervals
-                sync_errors[i] = norm(sync_values[i+1], fine_int.sol.u[end])
+                sync_errors_abs[i] = norm(sync_values[i+1], fine_result)
+                sync_errors_rel[i] = sync_errors_abs[i] / norm(zeros(size(fine_result)), fine_result)
             end
         end
 
@@ -113,7 +117,7 @@ function solve_sync(prob::SciMLBase.ODEProblem, alg;
         nsolve_seq += nsolve_fine_max
 
         # check for convergence
-        if !isempty(sync_errors) && maximum(sync_errors) < tol
+        if !isempty(sync_errors_abs) && (maximum(sync_errors_abs) < abstol || maximum(sync_errors_rel) < reltol)
             retcode = :Success
             break
         end
@@ -126,7 +130,7 @@ function solve_sync(prob::SciMLBase.ODEProblem, alg;
 
         # first active interval is exact now.
         # no coarse integration, no update equation
-        sync_errors[iteration] = 0
+        sync_errors_abs[iteration] = sync_errors_rel[iteration] = 0
         sync_values[iteration+1] = fine_ints[iteration].sol.u[end]
 
         # sequential coarse solve
@@ -166,7 +170,7 @@ function solve_sync(prob::SciMLBase.ODEProblem, alg;
     _add_stats!(merged_sol.stats, stats_total)
 
     # collect info
-    info = (; nsolve_seq=nsolve_seq, retcode=retcode, iterations=iteration)
+    info = (; nsolve_seq=nsolve_seq, retcode=retcode, iterations=iteration, abs_error=maximum(sync_errors_abs), rel_error=maximum(sync_errors_rel))
 
     return merged_sol, info
 end
