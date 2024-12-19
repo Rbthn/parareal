@@ -44,9 +44,6 @@ function solve_async_worker(
         if signal == SIGNAL_DONE
             break
         elseif signal == SIGNAL_WORKER
-            # clear signal
-            take!(info_channel)
-
             # increment counter
             iteration += 1
 
@@ -60,11 +57,9 @@ function solve_async_worker(
 
             # write result to coarse channel. Used for update equation
             put!(data_channel, int.sol.u[end])
-            put!(info_channel, SIGNAL_CONTROL)
-            continue
-        elseif signal == SIGNAL_CONTROL
-            sleep(1e-3)
-            continue
+
+            # clear signal to transfer control
+            take!(info_channel)
         else
             sleep(1e-3)
             continue
@@ -212,7 +207,6 @@ function solve_async(
         coarse_result = initial_int.sol.u[end]
 
         # push result to worker
-        wait_for_empty(info_channels[interval+1])
         put!(data_channels[interval+1], coarse_result)
         put!(info_channels[interval+1], SIGNAL_WORKER)
 
@@ -240,13 +234,12 @@ function solve_async(
 
         # first active interval is exact now.
         # no coarse integration, no update equation
-        wait_for_signal(info_channels[iteration], SIGNAL_CONTROL, clear=true)
+        wait_for_empty(info_channels[iteration])
         fine_result = take!(data_channels[iteration])
         # parareal exactness
         sync_errors_abs[iteration] = sync_errors_rel[iteration] = 0
         sync_values[iteration+1] = fine_result
         # tell worker to stop
-        wait_for_empty(info_channels[iteration])
         put!(info_channels[iteration], SIGNAL_DONE)
 
         for interval = iteration+1:parareal_intervals-1
@@ -258,7 +251,7 @@ function solve_async(
             coarse_result = coarse_int.sol.u[end]
 
             # make sure fine result is available
-            wait_for_signal(info_channels[interval], SIGNAL_CONTROL, clear=true)
+            wait_for_empty(info_channels[interval])
 
             # get result
             fine_result = take!(data_channels[interval])
@@ -278,7 +271,7 @@ function solve_async(
         end
 
         # take last result. Not required for update, but will mess up control flow otherwise
-        wait_for_signal(info_channels[parareal_intervals], SIGNAL_CONTROL, clear=true)
+        wait_for_empty(info_channels[parareal_intervals])
 
         # get result
         take!(data_channels[parareal_intervals])
@@ -324,11 +317,23 @@ function solve_async(
         return merged_sol
     end
 
+    # tell workers we are done
+    for interval = 1:parareal_intervals
+        ch = info_channels[interval]
+
+        # already marked as done
+        if isready(ch) && fetch(ch) == SIGNAL_DONE
+            continue
+        end
+
+        # if still running, wait until signal channel is empty
+        wait_for_empty(ch)
+        # then tell worker to quit
+        put!(ch, SIGNAL_DONE)
+    end
+
     # wait
     sol = fetch(merge)
-
-    # tell workers we are done
-    force_signal.(info_channels[iteration+1:parareal_intervals], SIGNAL_DONE)
 
     # collect info
     info = (; retcode=retcode, iterations=iteration, abs_error=maximum(sync_errors_abs), rel_error=maximum(sync_errors_rel))
