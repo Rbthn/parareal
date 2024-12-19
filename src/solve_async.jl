@@ -221,6 +221,25 @@ function solve_async(
     ##############################   MAIN LOOP    ##############################
     ############################################################################
 
+    # asynchronous task: merge full results
+    # depending on parareal settings, some to most workers finish early.
+    # transferring full solution and merging it to the overall solution
+    # can be done while the control node is waiting for other workers.
+    merge = Threads.@spawn begin
+        merged_sol = fetch(worker_futures[1])
+        _add_stats!(stats_total, merged_sol.stats)
+
+        for interval = 2:parareal_intervals
+            sol = fetch(worker_futures[interval])
+            _add_stats!(stats_total, sol.stats)
+            merge_solution!(merged_sol, sol)
+        end
+
+        _reset_stats!(merged_sol.stats)
+        _add_stats!(merged_sol.stats, stats_total)
+        return merged_sol
+    end
+
     retcode = :Default
     iteration = 1
     maxit = min(maxit, parareal_intervals)
@@ -297,25 +316,6 @@ function solve_async(
     ############################################################################
     ##########################   COMBINE SOLUTIONS   ###########################
     ############################################################################
-
-    # asynchronous task: merge full results
-    #   depending on parareal settings, some to most workers finish early.
-    #   transferring full solution and merging it to the overall solution
-    #   can be done while the control node is waiting for other workers.
-    merge = Threads.@spawn begin
-        merged_sol = fetch(worker_futures[1])
-        _add_stats!(stats_total, merged_sol.stats)
-
-        for interval = 2:parareal_intervals
-            sol = fetch(worker_futures[interval])
-            _add_stats!(stats_total, sol.stats)
-            merge_solution!(merged_sol, sol)
-        end
-
-        _reset_stats!(merged_sol.stats)
-        _add_stats!(merged_sol.stats, stats_total)
-        return merged_sol
-    end
 
     # tell workers we are done
     for interval = 1:parareal_intervals
