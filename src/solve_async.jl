@@ -1,6 +1,7 @@
 import SciMLBase
 using DifferentialEquations
 using Distributed
+using Logging
 
 const SIGNAL_WORKER = 1
 const SIGNAL_CONTROL = 0
@@ -61,8 +62,8 @@ function solve_async_worker(
             # clear signal to transfer control
             take!(info_channel)
         else
-            sleep(1e-3)
-            continue
+            @debug "Worker $(id()) received unexpected signal"
+            sleep(1)
         end
     end
     return int.sol
@@ -201,6 +202,7 @@ function solve_async(
     put!(info_channels[1], SIGNAL_WORKER)
     reinit!(initial_int, sync_values[1], t0=sync_points[1])
 
+    @debug "Starting sequential initialization"
     for interval = 1:parareal_intervals-1
         # initial integration
         step!(initial_int)
@@ -245,8 +247,11 @@ function solve_async(
     maxit = min(maxit, parareal_intervals)
 
     while iteration <= maxit
+        @debug "Iteration $iteration in main Parareal loop"
+
         # if max. iterations reached, break here. Sequential update not needed
         if iteration >= maxit
+            @debug "Max. iterations reached"
             retcode = :MaxIters
             break
         end
@@ -262,6 +267,7 @@ function solve_async(
         put!(info_channels[iteration], SIGNAL_DONE)
 
         for interval = iteration+1:parareal_intervals-1
+            @debug "Starting sequential update in iteration $iteration"
             # coarse integration
             # reseting the integrator does not reset the statistics!
             _reset_stats!(coarse_int.sol.stats)
@@ -296,6 +302,7 @@ function solve_async(
         take!(data_channels[parareal_intervals])
 
         if maximum(sync_errors_abs) < abstol || maximum(sync_errors_rel) < reltol
+            @debug "Parareal synchronization errors below tolerance"
             retcode = :Success
             break
         end
@@ -331,9 +338,11 @@ function solve_async(
         # then tell worker to quit
         put!(ch, SIGNAL_DONE)
     end
+    @debug "Shut down remaining workers"
 
     # wait
     sol = fetch(merge)
+    @debug "Async result collection finished"
 
     # collect info
     info = (; retcode=retcode, iterations=iteration, abs_error=maximum(sync_errors_abs), rel_error=maximum(sync_errors_rel))
