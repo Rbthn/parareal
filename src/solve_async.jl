@@ -100,14 +100,6 @@ function solve_async(
     ############################################################################
     ###########################   SETUP DISTRIBUTED   ##########################
     ############################################################################
-    if !shared_memory
-        worker_num = nworkers()
-        worker_map = Dict{Int,Int}()
-        for i = 1:parareal_intervals
-            worker_map[i] = workers()[(i-1)%worker_num+1]
-        end
-    end
-
 
     # set up info channel to each worker. Signals what to do with values in data_channel.
     info_channels = [
@@ -189,7 +181,7 @@ function solve_async(
         if shared_memory
             worker_futures[interval] = @async fn()
         else
-            worker_futures[interval] = @spawnat worker_map[interval] fn()
+            worker_futures[interval] = @spawn fn()
         end
     end
 
