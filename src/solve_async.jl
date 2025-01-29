@@ -1,5 +1,5 @@
 import SciMLBase
-using DifferentialEquations
+using OrdinaryDiffEq
 using Distributed
 using Logging
 

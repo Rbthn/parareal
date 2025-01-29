@@ -1,5 +1,5 @@
 import SciMLBase
-using DifferentialEquations
+using OrdinaryDiffEq
 
 """
     Solve ODEProblem using the Parareal algorithm.
