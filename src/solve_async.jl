@@ -63,7 +63,7 @@ function solve_async_worker(
             take!(info_channel)
         else
             @debug "Worker $(id()) received unexpected signal"
-            sleep(1)
+            sleep(1e-3)
         end
     end
     return int.sol
@@ -91,9 +91,9 @@ function solve_async(
     abstol=1e-6::Float64,
     norm=(x, y) -> maximum(abs.(x - y)),
     maxit=parareal_intervals::Int,
-    coarse_args=(),
-    fine_args=(),
-    init_args=coarse_args,
+    coarse_args=(;),
+    fine_args=(;),
+    init_args=(;),
     kwargs...
 )
 
@@ -147,19 +147,32 @@ function solve_async(
     # statistics
     stats_total = SciMLBase.DEStats()
 
-    initial_int = init(prob, alg;
-        tstops=sync_points,
-        advance_to_tstop=true,
-        kwargs...,
-        init_args...,
-    )
+    if parareal_intervals > 1
+        coarse_int = init(prob, alg;
+            kwargs...,
+            coarse_args...,
+            # step to sync points
+            tstops=sync_points,
+            advance_to_tstop=true,
+            # only save result at sync points
+            saveat=sync_points,
+        )
 
-    coarse_int = init(prob, alg;
-        tstops=sync_points,
-        advance_to_tstop=true,
-        kwargs...,
-        coarse_args...,
-    )
+        # only construct initial integrator if separate options are given
+        if !isempty(init_args)
+            initial_int = init(prob, alg;
+                kwargs...,
+                init_args...,
+                # step to sync points
+                tstops=sync_points,
+                advance_to_tstop=true,
+                # only save result at sync points
+                saveat=sync_points,
+            )
+        else
+            initial_int = coarse_int
+        end
+    end
 
     ############################################################################
     ############################   START WORKERS    ############################
