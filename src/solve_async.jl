@@ -89,6 +89,7 @@ function solve_async(
     parareal_intervals::Int,
     reltol=1e-3::Float64,
     abstol=1e-6::Float64,
+    statistics=true,
     norm=(x, y) -> maximum(abs.(x - y)),
     maxit=parareal_intervals::Int,
     coarse_args=(;),
@@ -145,7 +146,9 @@ function solve_async(
     sync_errors_rel = fill(Inf, parareal_intervals - 1)
 
     # statistics
-    stats_total = SciMLBase.DEStats()
+    if statistics
+        stats_total = SciMLBase.DEStats()
+    end
 
     if parareal_intervals > 1
         coarse_int = init(prob, alg;
@@ -222,7 +225,9 @@ function solve_async(
     end
 
     # add statistics from initialization
-    _add_stats!(stats_total, initial_int.sol.stats)
+    if statistics
+        _add_stats!(stats_total, initial_int.sol.stats)
+    end
 
     ############################################################################
     ##############################   MAIN LOOP    ##############################
@@ -234,16 +239,22 @@ function solve_async(
     # can be done while the control node is waiting for other workers.
     merge = Threads.@spawn begin
         merged_sol = fetch(worker_futures[1])
-        _add_stats!(stats_total, merged_sol.stats)
+        if statistics
+            _add_stats!(stats_total, merged_sol.stats)
+        end
 
         for interval = 2:parareal_intervals
             sol = fetch(worker_futures[interval])
-            _add_stats!(stats_total, sol.stats)
+            if statistics
+                _add_stats!(stats_total, sol.stats)
+            end
             merge_solution!(merged_sol, sol)
         end
 
-        _reset_stats!(merged_sol.stats)
-        _add_stats!(merged_sol.stats, stats_total)
+        if statistics
+            _reset_stats!(merged_sol.stats)
+            _add_stats!(merged_sol.stats, stats_total)
+        end
         return merged_sol
     end
 
@@ -273,9 +284,13 @@ function solve_async(
 
         for interval = iteration+1:parareal_intervals-1
             @debug "Starting sequential update in iteration $iteration"
-            # coarse integration
+
             # reseting the integrator does not reset the statistics!
-            _reset_stats!(coarse_int.sol.stats)
+            if statistics
+                _reset_stats!(coarse_int.sol.stats)
+            end
+
+            # coarse integration
             reinit!(coarse_int, sync_values[interval], t0=sync_points[interval])
             step!(coarse_int)
             coarse_result = coarse_int.sol.u[end]
@@ -297,7 +312,9 @@ function solve_async(
             coarse_prev[interval] = coarse_result
 
             # add statistics
-            _add_stats!(stats_total, coarse_int.sol.stats)
+            if statistics
+                _add_stats!(stats_total, coarse_int.sol.stats)
+            end
         end
 
         # take last result. Not required for update, but will mess up control flow otherwise
