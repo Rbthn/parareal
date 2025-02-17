@@ -85,8 +85,9 @@ end
 """
 function solve_async(
     prob::ODEProblem, alg;
-    shared_memory=true,
+    shared_memory=false,
     parareal_intervals::Int,
+    worker_ids=workers(),
     reltol=1e-3::Float64,
     abstol=1e-6::Float64,
     statistics=true,
@@ -197,7 +198,7 @@ function solve_async(
         if shared_memory
             worker_futures[interval] = @async fn()
         else
-            worker_futures[interval] = @spawn fn()
+            worker_futures[interval] = @spawnat worker_ids[interval] fn()
         end
     end
 
