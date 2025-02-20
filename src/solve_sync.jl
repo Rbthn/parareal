@@ -101,7 +101,7 @@ function solve_sync(
         @debug "Starting sequential initialization"
         for interval = 1:parareal_intervals-1
             step!(initial_int)
-            coarse_result = initital_int.sol.u[end]
+            coarse_result = initial_int.sol.u[end]
 
             sync_values[interval+1] = copy(coarse_result)
             coarse_prev[interval] = copy(coarse_result)
