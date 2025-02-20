@@ -196,7 +196,7 @@ function solve_async(
         )
 
         if shared_memory
-            worker_futures[interval] = @async fn()
+            worker_futures[interval] = Threads.@spawn fn()
         else
             worker_futures[interval] = @spawnat worker_ids[interval] fn()
         end
