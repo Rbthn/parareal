@@ -3,8 +3,29 @@ using OrdinaryDiffEq
 using Logging
 
 """
-    Solve ODEProblem using the Parareal algorithm.
-    Use thread-parallel for-loop for parallel integration.
+    solve_sync(prob, alg; <keyword arguments>)
+
+Solve given ODEProblem `prob` with Parareal, using the integration scheme `alg`.
+Parallel ("fine") integration is delegated to other threads via a thread-parallel `for`-loop, sequential ("coarse") integration is performed
+on the thread this function is called on.
+
+WARNING: This implementation ignores some optimizations in favor
+of an easier to understand, non-asynchronous program flow.
+It should only be used as a reference, as [`solve_async`](@ref) is expected
+to be faster.
+
+# Arguments
+- `parareal_intervals::Integer`: The number of intervals used in the Parareal algorithm.
+- `maxit`: Maximum number of Parareal iterations to perform. Will be set to `parareal_intervals` if not provided.
+- `norm::Function`: The norm by which to judge the discontinuities at interval interfaces. Default: Maximum absolute difference, `(x, y) -> maximum(abs.(x-y))`.
+- `reltol::Float`: Relative tolerance on Parareal error as determined by `norm`.
+- `abstol::Float`: Absolute tolerance on Parareal error as determined by `norm`.
+- `coarse_args`: Keyword-arguments to be used in sequential ("coarse") integration.
+- `fine_args`: Keyword-arguments to be used in parallel ("fine") integration.
+- `init_args`: Keyword-arguments to be used in the initial sequential integration. If none are provided, `coarse_args` are used.
+- Additional keyword-arguments are passed to all solvers. In case of keyword conflicts, the values specified in `coarse_args`, `fine_args` or `init_args` are preferred.
+
+See also: [`solve_async`](@ref).
 """
 function solve_sync(
     prob::SciMLBase.ODEProblem, alg;

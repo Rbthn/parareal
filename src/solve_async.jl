@@ -8,9 +8,11 @@ const SIGNAL_CONTROL = 0
 const SIGNAL_DONE = -1
 
 """
-    Helper function called on each worker.
-    Receives updated initial values from control node,
-    performs integration and sends end value back to control node.
+    solve_async_worker(prob, alg, interval; <keyword arguments>)
+
+Perform fine integration of problem `prob` with integration scheme `alg` on interval `interval`.
+This function should not be called directly, but is calledfrom [`solve_async`](@ref)
+on a separate worker or thread.
 """
 function solve_async_worker(
     prob::ODEProblem,
@@ -71,27 +73,55 @@ end
 
 
 """
-    Main function called on control node.
-    Performs sequential integration, waits for workers to finish parallel integration, then applies update formula.
+    solve_async(prob, alg; <keyword arguments>)
 
-    If `shared_memory` is set to `true` (default), parallel integration is
-    performed using thread-parallel workers (on the same machine). This
-    approach requires at least `parareal_intervals` processsors for optimal
-    performance.
-    Otherwise, parallel integration is performed using distributed workers
-    (separate julia processes which may be on different machines). This
-    approach does not exploit shared memory and is thus expected to be slower
-    when run on a single machine.
+Solve given ODEProblem `prob` with Parareal, using the integration scheme `alg`.
+Parallel ("fine") integration is delegated to other workers or threads,
+sequential ("coarse") integration is performed
+on the worker / thread this function is called on.
+
+If `shared_memory` is set to `false` (default), parallel integration
+is performed using the `Distributed` framework's worker model,
+where workers are added via `addprocs()` and may live on different machines.
+This can generate some communication overhead, as the values
+at synchronization points need to be sent over the network.
+
+Delegation to particular workers is achieved by passing their IDs
+in `worker_ids`. If none are supplied, work may be delegated to all available workers.
+
+WARNING: If your problem makes use of global variables, make sure they're available
+to all workers. This can be done by prefixing their declarations with `@everywhere`.
+
+If `shared_memory` is set to `true`, parallel integration is performed using `Threads`.
+This requires Julia to be started with the appropriate number of threads,
+e.g. by calling `julia -t N` from the command line. See [https://docs.julialang.org/en/v1/manual/multi-threading/#Starting-Julia-with-multiple-threads]
+for other options. The shared memory implementation is expected to be faster for
+some problems, as the communication overhead is reduced. Allocation-heavy code, however,
+can be severely bottlenecked by Julia's non-concurrent GC implementation. In these cases,
+the `Distributed` implementation is expected to be faster.
+
+# Arguments
+- `parareal_intervals::Integer`: The number of intervals used in the Parareal algorithm.
+- `maxit`: Maximum number of Parareal iterations to perform. Will be set to `parareal_intervals` if not provided.
+- `norm::Function`: The norm by which to judge the discontinuities at interval interfaces. Default: Maximum absolute difference, `(x, y) -> maximum(abs.(x-y))`.
+- `reltol::Float`: Relative tolerance on Parareal error as determined by `norm`.
+- `abstol::Float`: Absolute tolerance on Parareal error as determined by `norm`.
+- `coarse_args`: Keyword-arguments to be used in sequential ("coarse") integration.
+- `fine_args`: Keyword-arguments to be used in parallel ("fine") integration.
+- `init_args`: Keyword-arguments to be used in the initial sequential integration. If none are provided, `coarse_args` are used.
+- Additional keyword-arguments are passed to all solvers. In case of keyword conflicts, the values specified in `coarse_args`, `fine_args` or `init_args` are preferred.
+
+See also: [`solve_async_worker`](@ref), [`solve_sync`](@ref).
 """
 function solve_async(
     prob::ODEProblem, alg;
     shared_memory=false,
-    parareal_intervals::Int,
     worker_ids=workers(),
+    statistics=true,
+    parareal_intervals::Int,
+    norm=(x, y) -> maximum(abs.(x - y)),
     reltol=1e-3::Float64,
     abstol=1e-6::Float64,
-    statistics=true,
-    norm=(x, y) -> maximum(abs.(x - y)),
     maxit=parareal_intervals::Int,
     coarse_args=(;),
     fine_args=(;),
