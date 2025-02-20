@@ -8,9 +8,11 @@ Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 Distributed = "1.11.0"
 Logging = "1.11.0"
 OrdinaryDiffEq = "6.90.1"
 SciMLBase = "2.72.1"
+Test = "1.11.0"
