@@ -351,7 +351,7 @@ function solve_async(
         # get result
         take!(data_channels[parareal_intervals])
 
-        if maximum(sync_errors_abs) < abstol || maximum(sync_errors_rel) < reltol
+        if maximum(sync_errors_abs) <= abstol || maximum(sync_errors_rel) <= reltol
             @debug "Parareal synchronization errors below tolerance"
             retcode = :Success
             break

@@ -161,7 +161,7 @@ function solve_sync(
         end
 
         # check for convergence
-        if !isempty(sync_errors_abs) && (maximum(sync_errors_abs) < abstol || maximum(sync_errors_rel) < reltol)
+        if !isempty(sync_errors_abs) && (maximum(sync_errors_abs) <= abstol || maximum(sync_errors_rel) <= reltol)
             @debug "Parareal synchronization errors below tolerance"
             retcode = :Success
             break
