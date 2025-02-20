@@ -116,7 +116,7 @@ See also: [`solve_async_worker`](@ref), [`solve_sync`](@ref).
 function solve_async(
     prob::ODEProblem, alg;
     shared_memory=false,
-    worker_ids=workers(),
+    worker_ids=[],
     statistics=true,
     parareal_intervals::Int,
     norm=(x, y) -> maximum(abs.(x - y)),
@@ -228,6 +228,12 @@ function solve_async(
         if shared_memory
             worker_futures[interval] = Threads.@spawn fn()
         else
+            # determine available workers if none are provided
+            if isempty(worker_ids)
+                worker_idx = [(i - 1) % nworkers() + 1 for i = 1:parareal_intervals]
+                worker_ids = workers()[worker_idx]
+            end
+
             worker_futures[interval] = @spawnat worker_ids[interval] fn()
         end
     end
