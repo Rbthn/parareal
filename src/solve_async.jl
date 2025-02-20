@@ -62,7 +62,7 @@ function solve_async_worker(
             # clear signal to transfer control
             take!(info_channel)
         else
-            @debug "Worker $(id()) received unexpected signal"
+            @warn "Worker $(id()) received unexpected signal"
             sleep(1e-3)
         end
     end
@@ -287,9 +287,8 @@ function solve_async(
             @debug "Starting sequential update in iteration $iteration"
 
             # reseting the integrator does not reset the statistics!
-            if statistics
-                _reset_stats!(coarse_int.sol.stats)
-            end
+            statistics && _reset_stats!(coarse_int.sol.stats)
+
 
             # coarse integration
             reinit!(coarse_int, sync_values[interval], t0=sync_points[interval])
@@ -313,9 +312,7 @@ function solve_async(
             coarse_prev[interval] = coarse_result
 
             # add statistics
-            if statistics
-                _add_stats!(stats_total, coarse_int.sol.stats)
-            end
+            statistics && _add_stats!(stats_total, coarse_int.sol.stats)
         end
 
         # take last result. Not required for update, but will mess up control flow otherwise
