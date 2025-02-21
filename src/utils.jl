@@ -67,13 +67,16 @@ end
 """
     idle-wait until RemoteChannel `ch` is empty.
 """
-function wait_for_empty(ch::Union{Channel,RemoteChannel}; sleep_sec::Real=1e-3)
+function wait_for_empty(ch::Union{Channel,RemoteChannel}, fut=nothing; sleep_sec::Real=1e-3)
     while true
         empty = !isready(ch)
 
         if empty
             break
         else
+            if !isnothing(fut)
+                check_for_error(fut)
+            end
             sleep(sleep_sec)
         end
     end
@@ -93,4 +96,18 @@ function force_signal(ch::Union{Channel,RemoteChannel}, sig)
         take!(ch)
         put!(ch, sig)
     end
+end
+
+function check_for_error(fut::Future)
+    if isready(fut)
+        fetch(fut)
+    end
+    return nothing
+end
+
+function check_for_error(fut::Task)
+    if istaskdone(fut)
+        fetch(fut)
+    end
+    return nothing
 end

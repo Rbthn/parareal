@@ -268,10 +268,6 @@ function solve_async(
         _add_stats!(stats_total, initial_int.sol.stats)
     end
 
-    ############################################################################
-    ##############################   MAIN LOOP    ##############################
-    ############################################################################
-
     # asynchronous task: merge full results
     # depending on parareal settings, some to most workers finish early.
     # transferring full solution and merging it to the overall solution
@@ -297,6 +293,23 @@ function solve_async(
         return merged_sol
     end
 
+    # asynchronous task: observe workers for errors, throw error
+    error = Threads.@spawn begin
+        while true
+            for fut in worker_futures
+                if istaskdone(fut)
+                    fetch(fut)
+                end
+            end
+            sleep(1e-3)
+        end
+    end
+
+
+    ############################################################################
+    ##############################   MAIN LOOP    ##############################
+    ############################################################################
+
     retcode = :Default
     iteration = 1
     maxit = min(maxit, parareal_intervals)
@@ -313,7 +326,7 @@ function solve_async(
 
         # first active interval is exact now.
         # no coarse integration, no update equation
-        wait_for_empty(info_channels[iteration])
+        wait_for_empty(info_channels[iteration], worker_futures[iteration])
         fine_result = take!(data_channels[iteration])
         # parareal exactness
         sync_errors_abs[iteration] = sync_errors_rel[iteration] = 0
@@ -334,7 +347,7 @@ function solve_async(
             coarse_result = coarse_int.sol.u[end]
 
             # make sure fine result is available
-            wait_for_empty(info_channels[interval])
+            wait_for_empty(info_channels[interval], worker_futures[iteration])
 
             # get result
             fine_result = take!(data_channels[interval])
@@ -354,7 +367,7 @@ function solve_async(
         end
 
         # take last result. Not required for update, but will mess up control flow otherwise
-        wait_for_empty(info_channels[parareal_intervals])
+        wait_for_empty(info_channels[parareal_intervals], worker_futures[iteration])
 
         # get result
         take!(data_channels[parareal_intervals])
@@ -368,7 +381,7 @@ function solve_async(
         # update for next iteration
         for interval = iteration+1:parareal_intervals
             # make sure we can write
-            wait_for_empty(info_channels[interval])
+            wait_for_empty(info_channels[interval], worker_futures[iteration])
 
             # write data
             put!(data_channels[interval], sync_values[interval])
