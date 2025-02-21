@@ -89,8 +89,10 @@ at synchronization points need to be sent over the network.
 Delegation to particular workers is achieved by passing their IDs
 in `worker_ids`. If none are supplied, work may be delegated to all available workers.
 
-WARNING: If your problem makes use of global variables, make sure they're available
-to all workers. This can be done by prefixing their declarations with `@everywhere`.
+WARNING: To use the distributed implementation, it has to be loaded
+on all workers. After adding workers, run `@everywhere using Parareal`.
+If your problem makes use of global variables, make sure they're available
+to all workers by prefixing their declaration with `@everywhere`.
 
 If `shared_memory` is set to `true`, parallel integration is performed using `Threads`.
 This requires Julia to be started with the appropriate number of threads,
