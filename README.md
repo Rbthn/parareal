@@ -31,3 +31,7 @@ This implementation supports two parallelization mechanisms:
 - activated with keyword-argument `shared_memory=true`
 - start Julia with multiple threads: `julia -t N`
 - This method has lower communication overhead, but its performance suffers from frequent garbage collection. It is thus expected to be slower than the distributed implemetation for most problems.
+
+## Examples
+
+see `examples/dahlquist-equation.jl` for a usage example.
