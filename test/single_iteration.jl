@@ -3,7 +3,7 @@
 # when coarse and fine propagator are chosen identical.
 #
 
-@testset "Single iteration" begin
+@testset "single iteration" begin
     # %% Setup
     @everywhere function deriv!(du, u, p, t)
         du[:] = -1.0 .* u
@@ -30,7 +30,7 @@
 
 
     # %% Test 1: sync implementation
-    @testset "Sync. implementation" begin
+    @testset "sync. implementation" begin
         sol, stats = Parareal.solve_sync(
             prob, alg;
             dt=dt,
@@ -45,7 +45,7 @@
 
 
     # %% Test 2: async shared implementation
-    @testset "Async. threaded implementation" begin
+    @testset "async. threaded implementation" begin
         sol, stats = Parareal.solve_async(
             prob, alg;
             dt=dt,
@@ -61,7 +61,7 @@
 
 
     # %% Test 3: async dist implementation
-    @testset "Async. distributed implementation" begin
+    @testset "async. distributed implementation" begin
         sol, stats = Parareal.solve_async(
             prob, alg;
             dt=dt,

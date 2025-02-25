@@ -2,7 +2,7 @@
 # Make sure that we obtain the same result if we iterate all the way through.
 #
 
-@testset "Full iteration" begin
+@testset "full iteration" begin
     # %% Setup
     function deriv!(du, u, p, t)
         du[:] = -1.0 .* u
@@ -29,7 +29,7 @@
 
 
     # %% Test 1: sync implementation
-    @testset "Sync. implementation" begin
+    @testset "sync. implementation" begin
         sol, _ = Parareal.solve_sync(
             prob, alg;
             dt=dt_fine,
@@ -42,7 +42,7 @@
 
 
     # %% Test 2: async shared implementation
-    @testset "Async. threaded implementation" begin
+    @testset "async. threaded implementation" begin
         sol, _ = Parareal.solve_async(
             prob, alg;
             dt=dt_fine,
@@ -56,7 +56,7 @@
 
 
     # %% Test 3: async dist implementation
-    @testset "Async. distributed implementation" begin
+    @testset "async. distributed implementation" begin
         sol, _ = Parareal.solve_async(
             prob, alg;
             dt=dt_fine,
