@@ -217,7 +217,13 @@ function solve_sync(
     statistics && _add_stats!(merged_sol.stats, stats_total)
 
     # collect info
-    info = (; retcode=retcode, iterations=iteration, abs_error=maximum(sync_errors_abs), rel_error=maximum(sync_errors_rel), nsolve_seq=nsolve_seq,)
+    info = (;
+        retcode=retcode,
+        iterations=iteration,
+        abs_error=maximum(sync_errors_abs, init=0.0),
+        rel_error=maximum(sync_errors_rel, init=0.0),
+        nsolve_seq=nsolve_seq,
+    )
 
     return merged_sol, info
 end

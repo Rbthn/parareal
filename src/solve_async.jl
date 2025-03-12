@@ -247,25 +247,28 @@ function solve_async(
     # handle first interval
     put!(data_channels[1], sync_values[1])
     put!(info_channels[1], SIGNAL_WORKER)
-    reinit!(initial_int, sync_values[1], t0=sync_points[1])
 
-    @debug "Starting sequential initialization"
-    for interval = 1:parareal_intervals-1
-        # initial integration
-        step!(initial_int)
-        coarse_result = initial_int.sol.u[end]
+    if parareal_intervals > 1
+        reinit!(initial_int, sync_values[1], t0=sync_points[1])
 
-        # push result to worker
-        put!(data_channels[interval+1], coarse_result)
-        put!(info_channels[interval+1], SIGNAL_WORKER)
+        @debug "Starting sequential initialization"
+        for interval = 1:parareal_intervals-1
+            # initial integration
+            step!(initial_int)
+            coarse_result = initial_int.sol.u[end]
 
-        sync_values[interval+1] = coarse_result
-        coarse_prev[interval] = coarse_result
-    end
+            # push result to worker
+            put!(data_channels[interval+1], coarse_result)
+            put!(info_channels[interval+1], SIGNAL_WORKER)
 
-    # add statistics from initialization
-    if statistics
-        _add_stats!(stats_total, initial_int.sol.stats)
+            sync_values[interval+1] = coarse_result
+            coarse_prev[interval] = coarse_result
+        end
+
+        # add statistics from initialization
+        if statistics
+            _add_stats!(stats_total, initial_int.sol.stats)
+        end
     end
 
     # asynchronous task: merge full results
@@ -416,7 +419,12 @@ function solve_async(
     @debug "Async result collection finished"
 
     # collect info
-    info = (; retcode=retcode, iterations=iteration, abs_error=maximum(sync_errors_abs), rel_error=maximum(sync_errors_rel))
+    info = (;
+        retcode=retcode,
+        iterations=iteration,
+        abs_error=maximum(sync_errors_abs, init=0.0),
+        rel_error=maximum(sync_errors_rel, init=0.0),
+    )
 
     return sol, info
 end
