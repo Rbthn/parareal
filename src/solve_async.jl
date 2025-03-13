@@ -230,13 +230,15 @@ function solve_async(
         if shared_memory
             worker_futures[interval] = Threads.@spawn fn()
         else
-            # determine available workers if none are provided
+            # determine worker ids and count if none are provided
             if isempty(worker_ids)
-                worker_idx = [(i - 1) % nworkers() + 1 for i = 1:parareal_intervals]
-                worker_ids = workers()[worker_idx]
+                worker_ids = workers()
+                worker_count = nworkers()
+            else
+                worker_count = length(worker_ids)
             end
 
-            worker_futures[interval] = @spawnat worker_ids[interval] fn()
+            worker_futures[interval] = @spawnat worker_ids[((interval-1)%worker_count)+1] fn()
         end
     end
 
