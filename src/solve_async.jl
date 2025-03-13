@@ -118,7 +118,7 @@ See also: [`solve_async_worker`](@ref), [`solve_sync`](@ref).
 function solve_async(
     prob::ODEProblem, alg;
     shared_memory=false,
-    worker_ids=[],
+    worker_ids=workers(),
     statistics=true,
     parareal_intervals::Int,
     norm=(x, y) -> maximum(abs.(x - y)),
@@ -211,14 +211,23 @@ function solve_async(
         end
     end
 
+    # TODO if no workers were added, workers() = [1], but we should still use threads
+    if shared_memory == false && parareal_intervals > 1 && length(worker_ids) > 0
+        # prepare cachingpool
+        cpool = CachingPool(worker_ids)
+    else
+        cpool = nothing
+    end
+
     ############################################################################
     ############################   START WORKERS    ############################
     ############################################################################
     for interval = 1:parareal_intervals
         # function call on worker
-        fn = () -> solve_async_worker(
-            prob, alg,
-            interval;
+        fn = solve_async_worker
+
+        fn_args = (prob, alg, interval,)
+        fn_kwargs = (;
             maxit=maxit,
             info_channel=info_channels[interval],
             data_channel=data_channels[interval],
@@ -228,18 +237,13 @@ function solve_async(
             fine_args...,
         )
 
-        if shared_memory
-            worker_futures[interval] = Threads.@spawn fn()
-        else
-            # determine worker ids and count if none are provided
-            if isempty(worker_ids)
-                worker_ids = workers()
-                worker_count = nworkers()
-            else
-                worker_count = length(worker_ids)
-            end
+        worker_count = length(worker_ids)
 
-            worker_futures[interval] = @spawnat worker_ids[((interval-1)%worker_count)+1] fn()
+        if shared_memory || worker_count == 0
+            worker_futures[interval] = Threads.@spawn fn(fn_args...; fn_kwargs...)
+        else
+            worker_futures[interval] = remotecall(fn, cpool, fn_args...; fn_kwargs...)
+            #worker_futures[interval] = @spawnat worker_ids[((interval-1)%worker_count)+1] fn()
         end
     end
 
@@ -428,6 +432,7 @@ function solve_async(
     # wait
     sol = fetch(merge)
     @debug "Async result collection finished"
+    !isnothing(cpool) && clear!(cpool)
 
     # collect info
     info = (;
