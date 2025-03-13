@@ -175,6 +175,7 @@ function solve_async(
 
     # errors at sync points. Difference between left and right solution,
     # measured by given norm
+    # sync_errors[k] holds the error at the interface between intervals k and k+1
     sync_errors_abs = fill(Inf, parareal_intervals - 1)
     sync_errors_rel = fill(Inf, parareal_intervals - 1)
 
@@ -271,6 +272,7 @@ function solve_async(
         if statistics
             _add_stats!(stats_total, initial_int.sol.stats)
         end
+        @debug "Finished sequential initialization"
     end
 
     # asynchronous task: merge full results
@@ -322,34 +324,8 @@ function solve_async(
     while iteration <= maxit
         @debug "Iteration $iteration in main Parareal loop"
 
-        # if max. iterations reached, break here. Sequential update not needed
-        if iteration >= maxit
-            @debug "Max. iterations reached"
-            retcode = :MaxIters
-            break
-        end
-
-        # first active interval is exact now.
-        # no coarse integration, no update equation
-        wait_for_empty(info_channels[iteration], worker_futures[iteration])
-        fine_result = take!(data_channels[iteration])
-        # parareal exactness
-        sync_errors_abs[iteration] = sync_errors_rel[iteration] = 0
-        sync_values[iteration+1] = fine_result
-        # tell worker to stop
-        put!(info_channels[iteration], SIGNAL_DONE)
-
-        for interval = iteration+1:parareal_intervals-1
-            @debug "Starting sequential update in iteration $iteration"
-
-            # reseting the integrator does not reset the statistics!
-            statistics && _reset_stats!(coarse_int.sol.stats)
-
-
-            # coarse integration
-            reinit!(coarse_int, sync_values[interval], t0=sync_points[interval])
-            step!(coarse_int)
-            coarse_result = coarse_int.sol.u[end]
+        for interval = iteration:parareal_intervals
+            @debug "Starting sequential update for interval $interval in iteration $iteration"
 
             # make sure fine result is available
             wait_for_empty(info_channels[interval], worker_futures[iteration])
@@ -357,29 +333,62 @@ function solve_async(
             # get result
             fine_result = take!(data_channels[interval])
 
-            # sync error
-            sync_errors_abs[interval] = norm(sync_values[interval+1], fine_result)
-            sync_errors_rel[interval] = sync_errors_abs[interval] / norm(zeros(size(fine_result)), fine_result)
+            # first active interval is exact now.
+            if interval == iteration && interval > 1
+                # parareal exactness
+                @debug "Setting synchronization errors to zero for interface between intervals $(interval-1) and $(interval)"
+                sync_errors_abs[interval-1] = sync_errors_rel[interval-1] = 0
+            end
 
-            # update equation
-            sync_values[interval+1] = coarse_result + fine_result - coarse_prev[interval]
+            # if in last interval: Break after setting sync errors
+            if interval == parareal_intervals
+                break
+            else
+                # set sync error to the right of current interval
+                @debug "Computing synchronization errors for interface between intervals $(interval) and $(interval+1)"
+                sync_errors_abs[interval] = norm(sync_values[interval+1], fine_result)
+                sync_errors_rel[interval] = sync_errors_abs[interval] / norm(zeros(size(fine_result)), fine_result)
 
-            # set coarse_prev for next iteration
-            coarse_prev[interval] = coarse_result
+                # no coarse integration, no update equation
+                if interval == iteration
+                    @debug "Set sync value at interface between intervals $(interval) and $(interval+1) to fine result"
+                    sync_values[interval+1] = fine_result
+                    # tell worker to stop
+                    put!(info_channels[interval], SIGNAL_DONE)
+                    continue
+                end
 
-            # add statistics
-            statistics && _add_stats!(stats_total, coarse_int.sol.stats)
+                if interval < parareal_intervals
+                    @debug "Starting coarse integration over interval $interval in iteration $iteration"
+                    # reseting the integrator does not reset the statistics!
+                    statistics && _reset_stats!(coarse_int.sol.stats)
+                    # coarse integration
+                    reinit!(coarse_int, sync_values[interval], t0=sync_points[interval])
+                    step!(coarse_int)
+                    coarse_result = coarse_int.sol.u[end]
+
+                    # update equation
+                    sync_values[interval+1] = coarse_result + fine_result - coarse_prev[interval]
+
+                    # set coarse_prev for next iteration
+                    coarse_prev[interval] = coarse_result
+
+                    # add statistics
+                    statistics && _add_stats!(stats_total, coarse_int.sol.stats)
+                end
+            end
         end
 
-        # take last result. Not required for update, but will mess up control flow otherwise
-        wait_for_empty(info_channels[parareal_intervals], worker_futures[iteration])
-
-        # get result
-        take!(data_channels[parareal_intervals])
-
-        if maximum(sync_errors_abs) <= abstol || maximum(sync_errors_rel) <= reltol
+        if maximum(sync_errors_abs, init=0.0) <= abstol || maximum(sync_errors_rel, init=0.0) <= reltol
             @debug "Parareal synchronization errors below tolerance"
             retcode = :Success
+            break
+        end
+
+        # if max. iterations reached, break here. Sequential update not needed
+        if iteration == maxit
+            @debug "Max. iterations reached"
+            retcode = :MaxIters
             break
         end
 
